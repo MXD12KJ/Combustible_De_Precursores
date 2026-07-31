@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>Ordenes - Combustible de Precursores</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+    <div class="orders-topbar">
+        <h1 class="site-title small-title">Ordenes</h1>
+        <a href="{{ url_for('logout') }}" class="logout-link">Logout</a>
+    </div>
+
+    <main class="orders-container">
+        {% if not orders %}
+        <p class="no-orders">No hay ordenes en este momento.</p>
+        {% endif %}
+
+        {% for order in orders %}
+        <div class="order-box" id="order-{{ order.id }}" data-started="{{ order.started|lower }}"
+            data-finished="{{ order.finished|lower }}" data-contacted="{{ order.contacted|lower }}">
+
+            <div class="order-header">
+                <span class="order-name">{{ order.name }}</span>
+                <span class="order-time">{{ order.timestamp }}</span>
+            </div>
+
+            <div class="order-details">
+                <p><span class="question small-q">Telefono:</span> <span class="answer">{{ order.phone }}</span></p>
+                <p><span class="question small-q">Caliente/Frio:</span> <span class="answer">{{ order.temp }}</span></p>
+                <p><span class="question small-q">Bebida:</span> <span class="answer">{{ order.drink }}</span></p>
+                <p><span class="question small-q">Jarave:</span> <span class="answer">{{ order.jarave }}</span></p>
+                <p><span class="question small-q">Leche:</span> <span class="answer">{{ order.milk }}</span></p>
+                <p><span class="question small-q">Whip Cream:</span> <span class="answer">{{ order.whip }}</span></p>
+                <p><span class="question small-q">Drizzle:</span> <span class="answer">{{ order.drizzle|join(', ')
+                        }}</span></p>
+                {% if order.notes %}
+                <p><span class="question small-q">Notas:</span> <span class="answer">{{ order.notes }}</span></p>
+                {% endif %}
+            </div>
+
+            <div class="order-actions">
+                <button class="action-btn start-btn" data-field="started" data-id="{{ order.id }}">Start Order</button>
+                <button class="action-btn finish-btn" data-field="finished" data-id="{{ order.id }}">Finished</button>
+                <button class="action-btn contact-btn" data-field="contacted" data-id="{{ order.id }}">Contacted
+                    Precursor</button>
+                <button class="action-btn delete-btn" data-id="{{ order.id }}">Delete Order</button>
+            </div>
+        </div>
+        {% endfor %}
+    </main>
+
+    <!-- Delete confirmation modal -->
+    <div id="deleteModal" class="modal-overlay" style="display:none;">
+        <div class="modal-box">
+            <p class="modal-title">Are you sure you want to delete order?</p>
+            <div class="modal-buttons">
+                <button id="confirmDeleteBtn" class="modal-submit">Si</button>
+                <button id="cancelDeleteBtn" class="modal-cancel">No</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='orders.js') }}"></script>
+</body>
+
+</html>

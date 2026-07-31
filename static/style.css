@@ -1,0 +1,486 @@
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background-color: #6F4E37;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    color: #FFFFFF;
+    min-height: 100vh;
+}
+
+/* ---------- Top bar (View as Barista / View Orders / Exit) ---------- */
+.topbar {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    display: flex;
+    gap: 10px;
+    z-index: 100;
+}
+
+.view-orders-box,
+.exit-barista-box {
+    background-color: transparent;
+    color: #FFFDD0;
+    border: 2px solid #FFFDD0;
+    border-radius: 8px;
+    padding: 10px 18px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+}
+
+.view-orders-box:hover,
+.exit-barista-box:hover {
+    background-color: rgba(255, 253, 208, 0.15);
+}
+
+.exit-barista-box {
+    color: #FFFFFF;
+    border-color: #FFFFFF;
+}
+
+/* ---------- Title ---------- */
+.title-header {
+    text-align: center;
+    padding: 40px 20px 10px 20px;
+}
+
+.site-title {
+    color: #FFFDD0;
+    font-size: 42px;
+    font-weight: bold;
+    margin: 0;
+}
+
+.barista-banner {
+    color: #FFFDD0;
+    font-size: 15px;
+    font-weight: bold;
+    margin-top: 10px;
+}
+
+.small-title {
+    font-size: 30px;
+}
+
+/* ---------- Order form ---------- */
+.order-form-container {
+    max-width: 640px;
+    margin: 20px auto 80px auto;
+    padding: 0 20px;
+}
+
+.question-block {
+    margin-bottom: 32px;
+}
+
+.question {
+    font-weight: bold;
+    font-size: 22px;
+    color: #FFFFFF;
+    margin-bottom: 8px;
+}
+
+.helper-text {
+    font-weight: normal;
+    font-size: 15px;
+    color: #FFFFFF;
+    margin: 4px 0 10px 0;
+    opacity: 0.9;
+}
+
+.answer-input {
+    width: 100%;
+    font-size: 16px;
+    font-weight: normal;
+    padding: 10px;
+    border-radius: 6px;
+    border: none;
+    background-color: #FFFDD0;
+    color: #6F4E37;
+}
+
+.option-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.option-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    background-color: rgba(255, 255, 255, 0.08);
+    padding: 10px 14px;
+    border-radius: 6px;
+}
+
+.option-label {
+    font-weight: normal;
+    font-size: 17px;
+    color: #FFFFFF;
+    display: flex;
+    flex-direction: column;
+    cursor: pointer;
+    flex: 1;
+}
+
+.option-label input {
+    margin-right: 8px;
+}
+
+.option-note {
+    font-size: 13px;
+    font-weight: normal;
+    color: #FFFDD0;
+    margin-top: 4px;
+    margin-left: 24px;
+}
+
+.option-row.option-disabled {
+    opacity: 0.5;
+}
+
+.option-row.removed-option {
+    opacity: 0.5;
+    background-color: rgba(192, 57, 43, 0.2);
+}
+
+.option-row.removed-option .option-label {
+    text-decoration: line-through;
+}
+
+.remove-item-btn {
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: bold;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 2px solid #C0392B;
+    background-color: transparent;
+    color: #FFB3B3;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.remove-item-btn:hover {
+    background-color: rgba(192, 57, 43, 0.2);
+}
+
+.remove-item-btn.restore-btn {
+    border-color: #4CAF50;
+    color: #A6E6A9;
+}
+
+.remove-item-btn.restore-btn:hover {
+    background-color: rgba(76, 175, 80, 0.2);
+}
+
+/* ---------- Barista: add new item row ---------- */
+.add-item-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 4px;
+}
+
+.add-item-input {
+    flex: 1;
+    font-size: 15px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    border: 2px dashed rgba(255, 253, 208, 0.5);
+    background-color: rgba(255, 255, 255, 0.05);
+    color: #FFFFFF;
+}
+
+.add-item-input::placeholder {
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.add-item-input:focus {
+    outline: none;
+    border-color: #FFFDD0;
+}
+
+.add-item-btn {
+    flex-shrink: 0;
+    font-size: 13px;
+    font-weight: bold;
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: 2px solid #FFFDD0;
+    background-color: transparent;
+    color: #FFFDD0;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.add-item-btn:hover {
+    background-color: rgba(255, 253, 208, 0.15);
+}
+
+.word-count {
+    font-size: 13px;
+    color: #FFFFFF;
+    opacity: 0.8;
+    text-align: right;
+    margin-top: 4px;
+}
+
+.submit-btn {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    font-size: 20px;
+    font-weight: bold;
+    color: #6F4E37;
+    background-color: #FFFDD0;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-top: 20px;
+}
+
+.submit-btn:hover {
+    opacity: 0.9;
+}
+
+.form-error {
+    color: #FFB3B3;
+    font-weight: bold;
+    text-align: center;
+    margin-top: 12px;
+}
+
+.success-message {
+    display: none;
+    /* hidden by default; JS switches this to 'block' only after a successful order */
+    max-width: 640px;
+    margin: 20px auto;
+    padding: 20px;
+    background-color: #FFFDD0;
+    color: #6F4E37;
+    font-weight: bold;
+    font-size: 20px;
+    text-align: center;
+    border-radius: 8px;
+}
+
+/* ---------- Login modal ---------- */
+.modal-overlay {
+    display: none;
+    /* hidden by default; JS switches this to 'flex' only when a modal should show */
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+}
+
+.modal-box {
+    background-color: #6F4E37;
+    border: 2px solid #FFFDD0;
+    border-radius: 10px;
+    padding: 30px;
+    width: 90%;
+    max-width: 360px;
+    text-align: center;
+}
+
+.modal-title {
+    color: #FFFDD0;
+    font-size: 24px;
+    font-weight: bold;
+    margin-top: 0;
+}
+
+.modal-label {
+    display: block;
+    text-align: left;
+    color: #FFFFFF;
+    font-weight: bold;
+    margin: 14px 0 6px 0;
+}
+
+.modal-input {
+    width: 100%;
+    padding: 10px;
+    border-radius: 6px;
+    border: none;
+    font-size: 16px;
+}
+
+.login-error {
+    color: #FFB3B3;
+    font-weight: bold;
+    margin-top: 10px;
+}
+
+.modal-buttons {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.modal-submit {
+    flex: 1;
+    padding: 12px;
+    font-size: 16px;
+    font-weight: bold;
+    background-color: #FFFDD0;
+    color: #6F4E37;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.modal-cancel {
+    flex: 1;
+    padding: 12px;
+    font-size: 16px;
+    font-weight: bold;
+    background-color: transparent;
+    color: #FFFFFF;
+    border: 2px solid #FFFFFF;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+/* ---------- Orders page (barista) ---------- */
+.orders-topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 30px;
+}
+
+.logout-link {
+    color: #FFFDD0;
+    font-weight: bold;
+    text-decoration: none;
+    border: 2px solid #FFFDD0;
+    border-radius: 8px;
+    padding: 8px 16px;
+}
+
+.orders-container {
+    max-width: 900px;
+    margin: 0 auto 60px auto;
+    padding: 0 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.no-orders {
+    text-align: center;
+    font-size: 20px;
+    opacity: 0.85;
+}
+
+.order-box {
+    background-color: rgba(255, 255, 255, 0.08);
+    border: 1px solid #FFFDD0;
+    border-radius: 10px;
+    padding: 18px 22px;
+}
+
+.order-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 10px;
+    border-bottom: 1px solid rgba(255, 253, 208, 0.4);
+    padding-bottom: 8px;
+}
+
+.order-name {
+    font-size: 24px;
+    font-weight: bold;
+    color: #FFFDD0;
+}
+
+.order-time {
+    font-size: 13px;
+    color: #FFFFFF;
+    opacity: 0.7;
+}
+
+.order-details p {
+    margin: 6px 0;
+    font-size: 16px;
+}
+
+.small-q {
+    font-weight: bold;
+    font-size: 16px;
+    margin-right: 6px;
+}
+
+.answer {
+    font-weight: normal;
+}
+
+.order-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.action-btn {
+    flex: 1 1 auto;
+    min-width: 130px;
+    padding: 10px 8px;
+    font-size: 14px;
+    font-weight: bold;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    color: #FFFFFF;
+}
+
+.start-btn {
+    background-color: #4A90D9;
+}
+
+.start-btn.active {
+    background-color: #2C5D8A;
+    outline: 3px solid #FFFDD0;
+}
+
+.finish-btn {
+    background-color: #4CAF50;
+}
+
+.finish-btn.active {
+    background-color: #2E7031;
+    outline: 3px solid #FFFDD0;
+}
+
+.contact-btn {
+    background-color: #E8A33D;
+}
+
+.contact-btn.active {
+    background-color: #B67B24;
+    outline: 3px solid #FFFDD0;
+}
+
+.delete-btn {
+    background-color: #C0392B;
+}
+
+.delete-btn:hover {
+    background-color: #922B21;
+}
