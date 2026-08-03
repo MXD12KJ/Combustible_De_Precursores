@@ -122,17 +122,26 @@ body {
 }
 
 .option-label {
-    font-weight: normal;
-    font-size: 17px;
-    color: #FFFFFF;
-    display: flex;
-    flex-direction: column;
-    cursor: pointer;
-    flex: 1;
+  font-weight: normal;
+  font-size: 17px;
+  color: #FFFFFF;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  flex: 1;
+  position: relative;
 }
 
 .option-label input {
-    margin-right: 8px;
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  border: 0;
 }
 
 .option-note {
@@ -140,7 +149,7 @@ body {
     font-weight: normal;
     color: #FFFDD0;
     margin-top: 4px;
-    margin-left: 24px;
+    margin-left: 0;
 }
 
 .option-row.option-disabled {
@@ -223,6 +232,103 @@ body {
 
 .add-item-btn:hover {
     background-color: rgba(255, 253, 208, 0.15);
+}
+
+/* ---------- Selected option: whole row turns white, not just the dot ---------- */
+.option-row.selected-option {
+  background-color: #FFFFFF;
+}
+
+.option-row.selected-option .option-label {
+  color: #000000;
+}
+
+.option-row.selected-option .option-note {
+  color: #6F4E37;
+}
+
+/* ---------- Barista: Stop Taking Orders toggle switch ---------- */
+.store-status-control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.25);
+  border: 2px solid #FFFDD0;
+  border-radius: 28px;
+  transition: background-color 0.2s;
+}
+
+.toggle-slider::before {
+  content: "";
+  position: absolute;
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: #FFFDD0;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background-color: #C0392B;
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(22px);
+}
+
+.toggle-label {
+  font-weight: bold;
+  font-size: 16px;
+  color: #FFFDD0;
+}
+
+/* ---------- Customer-facing "not taking orders" message ---------- */
+.closed-message-container {
+  max-width: 500px;
+  margin: 100px auto;
+  padding: 0 20px;
+  text-align: center;
+}
+
+.closed-image {
+  max-width: 220px;
+  width: 100%;
+  height: auto;
+  margin-bottom: 24px;
+  border-radius: 8px;
+}
+
+.closed-text {
+  font-size: 24px;
+  font-weight: bold;
+  color: #FFFDD0;
 }
 
 .word-count {
