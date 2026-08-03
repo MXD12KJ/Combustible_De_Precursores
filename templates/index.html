@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="csrf-token" content="{{ csrf_token() }}">
-<title>Combustible de Precursores</title>
+<title>Little Lamb Cafe</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body data-is-barista="{{ is_barista|tojson }}">
@@ -19,7 +19,7 @@
 </div>
 
 <header class="title-header">
-  <h1 class="site-title">Combustible de Precursores</h1>
+  <h1 class="site-title">Little Lamb Cafe</h1>
   {% if is_barista %}
     <p class="barista-banner">Barista Mode: remove items you're out of, or add brand-new ones below.</p>
     <div class="store-status-control">
