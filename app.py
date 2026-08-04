@@ -77,8 +77,8 @@ OPTIONS = {
              "note": "(Solo disponible con bebidas frias)", "cold_only": True},
         ],
     },
-    "jarave": {
-        "question": "Jarave",
+    "jarabe": {
+        "question": "Jarabe",
         "type": "radio",
         "required": True,
         "choices": [
@@ -367,7 +367,7 @@ def submit_order():
         phone = clean_text(form.get("phone"), 20)
         temp = form.get("temp")
         drink = form.get("drink")
-        jarave = form.get("jarave")
+        jarabe = form.get("jarabe")
         milk = form.get("milk")
         whip = form.get("whip")
         drizzle = request.form.getlist("drizzle")
@@ -383,7 +383,7 @@ def submit_order():
         requires_milk = drink != "Americano"
 
         # Validate every selection is a real, known menu option (base or custom)
-        for category, value in (("temp", temp), ("drink", drink), ("jarave", jarave), ("whip", whip)):
+        for category, value in (("temp", temp), ("drink", drink), ("jarabe", jarabe), ("whip", whip)):
             if not value or not is_valid_choice(category, value, custom_items):
                 return jsonify({"success": False, "error": "Faltan campos requeridos."}), 400
 
@@ -402,7 +402,7 @@ def submit_order():
                 return jsonify({"success": False, "error": "Seleccion invalida."}), 400
 
         # Reject any selection that a barista has temporarily removed
-        selections = {"temp": [temp], "drink": [drink], "jarave": [jarave],
+        selections = {"temp": [temp], "drink": [drink], "Jarabe": [Jarabe],
                       "milk": [milk] if milk else [], "whip": [whip], "drizzle": drizzle}
         for category, values in selections.items():
             for value in values:
@@ -428,7 +428,7 @@ def submit_order():
             "phone": phone,
             "temp": display_value("temp", temp, custom_items),
             "drink": display_value("drink", drink, custom_items),
-            "jarave": display_value("jarave", jarave, custom_items),
+            "jarabe": display_value("jarabe", jarabe, custom_items),
             "milk": display_value("milk", milk, custom_items) if milk else "N/A",
             "whip": display_value("whip", whip, custom_items),
             "drizzle": [display_value("drizzle", v, custom_items) for v in drizzle],
