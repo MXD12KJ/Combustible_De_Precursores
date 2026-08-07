@@ -286,16 +286,6 @@ def save_custom_items(custom_items):
     with open(CUSTOM_ITEMS_FILE, "w", encoding="utf-8") as f:
         json.dump(custom_items, f, indent=2, ensure_ascii=False)
 
-def load_store_status():
-    if not os.path.exists(STORE_STATUS_FILE):
-        return {"orders_closed": False}
-    with open(STORE_STATUS_FILE, "r", encoding="utf-8") as f:
-        try:
-            data = json.load(f)
-        except json.JSONDecodeError:
-            data = {}
-    data.setdefault("orders_closed", False)
-    return data
 
 def load_store_status():
     if USE_REDIS:
@@ -487,17 +477,17 @@ def submit_order():
                 return jsonify({"success": False, "error": "Seleccion invalida."}), 400
 
         # Reject any selection that a barista has temporarily removed
-        selections = {"temp": [temp], "drink": [drink], "Jarave": [Jarave],
+        selections = {"temp": [temp], "drink": [drink], "jarave": [jarave],
                       "milk": [milk] if milk else [], "whip": [whip], "drizzle": drizzle}
         for category, values in selections.items():
             for value in values:
                 if value and value in removed.get(category, []):
                     return jsonify({"success": False,
-                                     "error": "Uno de los articulos seleccionados ya no esta disponible."}), 400
+                                    "error": "Uno de los articulos seleccionados ya no esta disponible."}), 400
 
         if drink == "Shakin' Espresso" and temp != "Frio":
             return jsonify({"success": False,
-                             "error": "Shakin' Espresso solo esta disponible con bebidas frias."}), 400
+                            "error": "Shakin' Espresso solo esta disponible con bebidas frias."}), 400
 
         if notes:
             word_count = len(notes.split())
@@ -513,7 +503,7 @@ def submit_order():
             "phone": phone,
             "temp": display_value("temp", temp, custom_items),
             "drink": display_value("drink", drink, custom_items),
-            "jarave": display_value("jarave", jarabe, custom_items),
+            "jarave": display_value("jarave", jarave, custom_items),
             "milk": display_value("milk", milk, custom_items) if milk else "N/A",
             "whip": display_value("whip", whip, custom_items),
             "drizzle": [display_value("drizzle", v, custom_items) for v in drizzle],
@@ -530,10 +520,10 @@ def submit_order():
 
     return jsonify({"success": True})
 
+
 # ---------------------------------------------------------------------------
 # Barista login
 # ---------------------------------------------------------------------------
-
 
 @app.route("/login", methods=["POST"])
 @rate_limit(5, 60)
@@ -652,20 +642,6 @@ def delete_custom_item():
         save_custom_items(custom_items)
 
     return jsonify({"success": True})
-
-@app.route("/toggle_store_status", methods=["POST"])
-@rate_limit(20, 60)
-@csrf_protect
-def toggle_store_status():
-    if not session.get("is_barista"):
-        return jsonify({"error": "unauthorized"}), 401
-
-    with _file_lock:
-        status = load_store_status()
-        status["orders_closed"] = not status.get("orders_closed", False)
-        save_store_status(status)
-
-    return jsonify({"success": True, "orders_closed": status["orders_closed"]})
 
 
 @app.route("/toggle_store_status", methods=["POST"])
