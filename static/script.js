@@ -33,8 +33,6 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // ---------- Shakin' Espresso only allowed for cold drinks ----------
-    var tempRadios = document.querySelectorAll('input[name="temp"]');
-
     function updateColdOnlyAvailability() {
         var selected = document.querySelector('input[name="temp"]:checked');
         var isCold = !!selected && selected.value === 'Frio';
@@ -55,10 +53,50 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    tempRadios.forEach(function (radio) {
-        radio.addEventListener('change', updateColdOnlyAvailability);
+    // ---------- Americano has no milk, so milk isn't required for it ----------
+    function updateMilkRequirement() {
+        var selectedDrink = document.querySelector('input[name="drink"]:checked');
+        var isAmericano = !!selectedDrink && selectedDrink.value === 'Americano';
+        var milkGroup = document.querySelector('.option-group[data-category="milk"]');
+        if (!milkGroup) return;
+
+        milkGroup.querySelectorAll('input[name="milk"]').forEach(function (input) {
+            var row = input.closest('.option-row');
+            var isPermanentlyRemoved = row && row.classList.contains('removed-option');
+
+            input.required = !isAmericano;
+
+            if (isAmericano) {
+                input.checked = false;
+                if (!isPermanentlyRemoved) input.disabled = true;
+                if (row) row.classList.add('option-disabled');
+            } else if (!isPermanentlyRemoved) {
+                input.disabled = false;
+                if (row) row.classList.remove('option-disabled');
+            }
+        });
+    }
+
+    // ---------- Selected option turns the whole row white, not just a dot ----------
+    function syncSelectedOptionStyling() {
+        document.querySelectorAll('.option-row').forEach(function (row) {
+            var input = row.querySelector('input');
+            row.classList.toggle('selected-option', !!(input && input.checked));
+        });
+    }
+
+    document.body.addEventListener('change', function (e) {
+        if (!e.target.matches('.option-row input')) return;
+
+        syncSelectedOptionStyling();
+
+        if (e.target.name === 'temp') updateColdOnlyAvailability();
+        if (e.target.name === 'drink') updateMilkRequirement();
     });
+
     updateColdOnlyAvailability();
+    updateMilkRequirement();
+    syncSelectedOptionStyling();
 
     // ---------- Word count for notes ----------
     var notes = document.getElementById('notes');
@@ -118,8 +156,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // ---------------------------------------------------------------------
     // Barista: remove/restore base items, delete custom items.
-    // Uses event delegation (listening on document.body) so this also
-    // works for custom item rows added dynamically after page load.
     // ---------------------------------------------------------------------
     var deleteItemModal = document.getElementById('deleteItemModal');
     var confirmDeleteItemBtn = document.getElementById('confirmDeleteItemBtn');
@@ -178,6 +214,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     if (input) {
                         if (input.dataset.coldOnly === 'true') {
                             updateColdOnlyAvailability();
+                        } else if (category === 'milk') {
+                            updateMilkRequirement();
                         } else {
                             input.disabled = false;
                         }
@@ -301,5 +339,59 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
     });
+
+    // ---------------------------------------------------------------------
+    // Barista: "Stop Taking Orders" toggle.
+    // ---------------------------------------------------------------------
+    var stopOrdersToggle = document.getElementById('stopOrdersToggle');
+    var stopOrdersModal = document.getElementById('stopOrdersModal');
+    var confirmStopOrdersBtn = document.getElementById('confirmStopOrdersBtn');
+    var cancelStopOrdersBtn = document.getElementById('cancelStopOrdersBtn');
+
+    function commitStoreStatusToggle() {
+        fetch('/toggle_store_status', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken }
+        })
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+                if (data.success && stopOrdersToggle) {
+                    stopOrdersToggle.checked = data.orders_closed;
+                }
+            });
+    }
+
+    if (stopOrdersToggle) {
+        stopOrdersToggle.addEventListener('change', function () {
+            if (stopOrdersToggle.checked) {
+                if (stopOrdersModal) stopOrdersModal.style.display = 'flex';
+            } else {
+                commitStoreStatusToggle();
+            }
+        });
+    }
+
+    if (cancelStopOrdersBtn) {
+        cancelStopOrdersBtn.addEventListener('click', function () {
+            if (stopOrdersModal) stopOrdersModal.style.display = 'none';
+            if (stopOrdersToggle) stopOrdersToggle.checked = false;
+        });
+    }
+
+    if (stopOrdersModal) {
+        stopOrdersModal.addEventListener('click', function (e) {
+            if (e.target === stopOrdersModal) {
+                stopOrdersModal.style.display = 'none';
+                if (stopOrdersToggle) stopOrdersToggle.checked = false;
+            }
+        });
+    }
+
+    if (confirmStopOrdersBtn) {
+        confirmStopOrdersBtn.addEventListener('click', function () {
+            if (stopOrdersModal) stopOrdersModal.style.display = 'none';
+            commitStoreStatusToggle();
+        });
+    }
 
 });
