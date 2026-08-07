@@ -5,6 +5,7 @@ import re
 import secrets
 import threading
 import time
+import urllib.request
 import uuid
 from collections import defaultdict, deque
 from datetime import datetime
@@ -39,6 +40,7 @@ DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 DATA_FILE = os.path.join(DATA_DIR, "orders.json")
 REMOVED_ITEMS_FILE = os.path.join(DATA_DIR, "removed_items.json")
 CUSTOM_ITEMS_FILE = os.path.join(DATA_DIR, "custom_items.json")
+STORE_STATUS_FILE = os.path.join(DATA_DIR, "store_status.json")
 
 BARISTA_USERNAME = os.environ.get("BARISTA_USERNAME", "South Bend Spanish")
 BARISTA_PASSWORD = os.environ.get("BARISTA_PASSWORD", "2tim4:5")
@@ -163,11 +165,60 @@ def build_display_options(custom_items):
 
 
 # ---------------------------------------------------------------------------
-# Storage helpers (file-based; fine at this scale). A lock guards read-modify
-# -write cycles so two simultaneous requests can't clobber each other.
+# Storage: Upstash Redis when configured (durable across Render restarts/
+# redeploys), falling back to local JSON files when it's not (so local
+# development still works without needing an Upstash account).
+#
+# Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN as environment
+# variables in Render to enable this. Get both from your Upstash database's
+# dashboard, under the "REST API" section.
 # ---------------------------------------------------------------------------
+UPSTASH_URL = os.environ.get("UPSTASH_REDIS_REST_URL", "").rstrip("/")
+UPSTASH_TOKEN = os.environ.get("UPSTASH_REDIS_REST_TOKEN", "")
+USE_REDIS = bool(UPSTASH_URL and UPSTASH_TOKEN)
+
+
+def _redis_command(*args):
+    """Send one command to Upstash Redis's REST API and return its result."""
+    body = json.dumps(list(args)).encode("utf-8")
+    req = urllib.request.Request(
+        UPSTASH_URL,
+        data=body,
+        headers={
+            "Authorization": "Bearer " + UPSTASH_TOKEN,
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        result = json.loads(resp.read().decode("utf-8"))
+    return result.get("result")
+
+
+def _redis_get_json(key, default):
+    try:
+        raw = _redis_command("GET", key)
+    except Exception as exc:
+        print("Upstash GET failed for key %r: %s" % (key, exc))
+        return default
+    if raw is None:
+        return default
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return default
+
+
+def _redis_set_json(key, value):
+    try:
+        _redis_command("SET", key, json.dumps(value, ensure_ascii=False))
+    except Exception as exc:
+        print("Upstash SET failed for key %r: %s" % (key, exc))
+
 
 def load_orders():
+    if USE_REDIS:
+        return _redis_get_json("orders", [])
     if not os.path.exists(DATA_FILE):
         return []
     with open(DATA_FILE, "r", encoding="utf-8") as f:
@@ -178,47 +229,86 @@ def load_orders():
 
 
 def save_orders(orders):
+    if USE_REDIS:
+        _redis_set_json("orders", orders)
+        return
     os.makedirs(DATA_DIR, exist_ok=True)
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(orders, f, indent=2, ensure_ascii=False)
 
 
 def load_removed_items():
-    if not os.path.exists(REMOVED_ITEMS_FILE):
-        return {category: [] for category in OPTIONS}
-    with open(REMOVED_ITEMS_FILE, "r", encoding="utf-8") as f:
-        try:
-            data = json.load(f)
-        except json.JSONDecodeError:
-            data = {}
+    if USE_REDIS:
+        data = _redis_get_json("removed_items", {})
+    elif not os.path.exists(REMOVED_ITEMS_FILE):
+        data = {}
+    else:
+        with open(REMOVED_ITEMS_FILE, "r", encoding="utf-8") as f:
+            try:
+                data = json.load(f)
+            except json.JSONDecodeError:
+                data = {}
     for category in OPTIONS:
         data.setdefault(category, [])
     return data
 
 
 def save_removed_items(removed):
+    if USE_REDIS:
+        _redis_set_json("removed_items", removed)
+        return
     os.makedirs(DATA_DIR, exist_ok=True)
     with open(REMOVED_ITEMS_FILE, "w", encoding="utf-8") as f:
         json.dump(removed, f, indent=2, ensure_ascii=False)
 
 
 def load_custom_items():
-    if not os.path.exists(CUSTOM_ITEMS_FILE):
-        return {category: [] for category in OPTIONS}
-    with open(CUSTOM_ITEMS_FILE, "r", encoding="utf-8") as f:
-        try:
-            data = json.load(f)
-        except json.JSONDecodeError:
-            data = {}
+    if USE_REDIS:
+        data = _redis_get_json("custom_items", {})
+    elif not os.path.exists(CUSTOM_ITEMS_FILE):
+        data = {}
+    else:
+        with open(CUSTOM_ITEMS_FILE, "r", encoding="utf-8") as f:
+            try:
+                data = json.load(f)
+            except json.JSONDecodeError:
+                data = {}
     for category in OPTIONS:
         data.setdefault(category, [])
     return data
 
 
 def save_custom_items(custom_items):
+    if USE_REDIS:
+        _redis_set_json("custom_items", custom_items)
+        return
     os.makedirs(DATA_DIR, exist_ok=True)
     with open(CUSTOM_ITEMS_FILE, "w", encoding="utf-8") as f:
         json.dump(custom_items, f, indent=2, ensure_ascii=False)
+
+
+def load_store_status():
+    if USE_REDIS:
+        data = _redis_get_json("store_status", {})
+    elif not os.path.exists(STORE_STATUS_FILE):
+        data = {}
+    else:
+        with open(STORE_STATUS_FILE, "r", encoding="utf-8") as f:
+            try:
+                data = json.load(f)
+            except json.JSONDecodeError:
+                data = {}
+    data.setdefault("orders_closed", False)
+    return data
+
+
+def save_store_status(status):
+    if USE_REDIS:
+        _redis_set_json("store_status", status)
+        return
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(STORE_STATUS_FILE, "w", encoding="utf-8") as f:
+        json.dump(status, f, indent=2, ensure_ascii=False)
 
 
 # ---------------------------------------------------------------------------
@@ -328,7 +418,9 @@ def index():
     removed = load_removed_items()
     custom_items = load_custom_items()
     display_options = build_display_options(custom_items)
-    return render_template("index.html", options=display_options, removed=removed, is_barista=is_barista)
+    store_status = load_store_status()
+    return render_template("index.html", options=display_options, removed=removed,
+                           is_barista=is_barista, orders_closed=store_status.get("orders_closed", False))
 
 
 @app.route("/submit_order", methods=["POST"])
@@ -337,6 +429,11 @@ def index():
 def submit_order():
     form = request.form
     with _file_lock:
+        store_status = load_store_status()
+        if store_status.get("orders_closed"):
+            return jsonify({"success": False,
+                            "error": "Perdon, ahorita no estamos tomando ordenes. \u00a1Pronto Regresamos!"}), 403
+
         removed = load_removed_items()
         custom_items = load_custom_items()
 
@@ -356,11 +453,19 @@ def submit_order():
         if not _PHONE_RE.match(phone):
             return jsonify({"success": False, "error": "Numero de telefono invalido."}), 400
 
+        # Americano has no milk, so milk is only required for other drinks
+        requires_milk = drink != "Americano"
+
         # Validate every selection is a real, known menu option (base or custom)
-        for category, value in (("temp", temp), ("drink", drink), ("jarave", jarave),
-                                ("milk", milk), ("whip", whip)):
+        for category, value in (("temp", temp), ("drink", drink), ("jarave", jarave), ("whip", whip)):
             if not value or not is_valid_choice(category, value, custom_items):
                 return jsonify({"success": False, "error": "Faltan campos requeridos."}), 400
+
+        if requires_milk:
+            if not milk or not is_valid_choice("milk", milk, custom_items):
+                return jsonify({"success": False, "error": "Faltan campos requeridos."}), 400
+        else:
+            milk = None
 
         max_drizzle = len(OPTIONS["drizzle"]["choices"]) + \
             len(custom_items.get("drizzle", []))
@@ -372,8 +477,8 @@ def submit_order():
                 return jsonify({"success": False, "error": "Seleccion invalida."}), 400
 
         # Reject any selection that a barista has temporarily removed
-        selections = {"temp": [temp], "drink": [drink], "jarave": [jarave], "milk": [milk],
-                      "whip": [whip], "drizzle": drizzle}
+        selections = {"temp": [temp], "drink": [drink], "Jarave": [Jarave],
+                      "milk": [milk] if milk else [], "whip": [whip], "drizzle": drizzle}
         for category, values in selections.items():
             for value in values:
                 if value and value in removed.get(category, []):
@@ -398,8 +503,8 @@ def submit_order():
             "phone": phone,
             "temp": display_value("temp", temp, custom_items),
             "drink": display_value("drink", drink, custom_items),
-            "jarave": display_value("jarave", jarave, custom_items),
-            "milk": display_value("milk", milk, custom_items),
+            "jarave": display_value("jarave", jarabe, custom_items),
+            "milk": display_value("milk", milk, custom_items) if milk else "N/A",
             "whip": display_value("whip", whip, custom_items),
             "drizzle": [display_value("drizzle", v, custom_items) for v in drizzle],
             "notes": notes,
@@ -415,10 +520,10 @@ def submit_order():
 
     return jsonify({"success": True})
 
-
 # ---------------------------------------------------------------------------
 # Barista login
 # ---------------------------------------------------------------------------
+
 
 @app.route("/login", methods=["POST"])
 @rate_limit(5, 60)
@@ -537,6 +642,21 @@ def delete_custom_item():
         save_custom_items(custom_items)
 
     return jsonify({"success": True})
+
+
+@app.route("/toggle_store_status", methods=["POST"])
+@rate_limit(20, 60)
+@csrf_protect
+def toggle_store_status():
+    if not session.get("is_barista"):
+        return jsonify({"error": "unauthorized"}), 401
+
+    with _file_lock:
+        status = load_store_status()
+        status["orders_closed"] = not status.get("orders_closed", False)
+        save_store_status(status)
+
+    return jsonify({"success": True, "orders_closed": status["orders_closed"]})
 
 
 # ---------------------------------------------------------------------------
