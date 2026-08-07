@@ -29,6 +29,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   if (loginModal && window.location.search.indexOf('login_error') !== -1) {
     loginModal.style.display = 'flex';
+    // Strip the query param so a refresh or revisit doesn't reopen the modal
     window.history.replaceState({}, document.title, window.location.pathname);
   }
 
@@ -85,99 +86,8 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  document.body.addEventListener('change', function (e) {
-    if (!e.target.matches('.option-row input')) return;
-
-    syncSelectedOptionStyling();
-
-    if (e.target.name === 'temp') updateColdOnlyAvailability();
-    if (e.target.name === 'drink') updateMilkRequirement();
-  });
-
-  updateColdOnlyAvailability();
-  updateMilkRequirement();
-  syncSelectedOptionStyling();
-
-  if (closeModalBtn) {
-    closeModalBtn.addEventListener('click', function () {
-      loginModal.style.display = 'none';
-    });
-  }
-
-  if (loginModal) {
-    loginModal.addEventListener('click', function (e) {
-      if (e.target === loginModal) {
-        loginModal.style.display = 'none';
-      }
-    });
-  }
-
-  if (loginModal && window.location.search.indexOf('login_error') !== -1) {
-    loginModal.style.display = 'flex';
-    window.history.replaceState({}, document.title, window.location.pathname);
-  }
-
-  // ---------- Shakin' Espresso only allowed for cold drinks ----------
-  function updateColdOnlyAvailability() {
-    var selected = document.querySelector('input[name="temp"]:checked');
-    var isCold = !!selected && selected.value === 'Frio';
-
-    document.querySelectorAll('input[data-cold-only="true"]').forEach(function (input) {
-      var row = input.closest('.option-row');
-      var isPermanentlyRemoved = row && row.classList.contains('removed-option');
-      if (isPermanentlyRemoved) {
-        return;
-      }
-      input.disabled = !isCold;
-      if (!isCold) {
-        input.checked = false;
-      }
-      if (row) {
-        row.classList.toggle('option-disabled', !isCold);
-      }
-    });
-  }
-
-  // ---------- Americano has no milk, so milk isn't required for it ----------
-  function updateMilkRequirement() {
-    var selectedDrink = document.querySelector('input[name="drink"]:checked');
-    var isAmericano = !!selectedDrink && selectedDrink.value === 'Americano';
-    var milkGroup = document.querySelector('.option-group[data-category="milk"]');
-    if (!milkGroup) return;
-
-    milkGroup.querySelectorAll('input[name="milk"]').forEach(function (input) {
-      var row = input.closest('.option-row');
-      var isPermanentlyRemoved = row && row.classList.contains('removed-option');
-
-      // ---------------------------------------------------------------------
-      // Barista: remove/restore base items, delete custom items.
-      // ---------------------------------------------------------------------
-      var deleteItemModal = document.getElementById('deleteItemModal');
-      var confirmDeleteItemBtn = document.getElementById('confirmDeleteItemBtn');
-      var cancelDeleteItemBtn = document.getElementById('cancelDeleteItemBtn');
-      var pendingDeleteCategory = null;
-      var pendingDeleteValue = null;
-      var pendingDeleteRow = null;
-
-      if (isAmericano) {
-        input.checked = false;
-        if (!isPermanentlyRemoved) input.disabled = true;
-        if (row) row.classList.add('option-disabled');
-      } else if (!isPermanentlyRemoved) {
-        input.disabled = false;
-        if (row) row.classList.remove('option-disabled');
-      }
-    });
-  }
-
-  // ---------- Selected option turns the whole row white, not just a dot ----------
-  function syncSelectedOptionStyling() {
-    document.querySelectorAll('.option-row').forEach(function (row) {
-      var input = row.querySelector('input');
-      row.classList.toggle('selected-option', !!(input && input.checked));
-    });
-  }
-
+  // One delegated listener covers all of the above, including for option
+  // rows (custom items, add-item inputs) added dynamically after load.
   document.body.addEventListener('change', function (e) {
     if (!e.target.matches('.option-row input')) return;
 
@@ -233,35 +143,24 @@ document.addEventListener('DOMContentLoaded', function () {
             return { ok: response.ok, data: data };
           });
         })
-        .then(function (response) { return response.json(); })
-        .then(function (data) {
-          if (!data.success) return;
-
-          if (data.removed) {
-            row.classList.add('removed-option');
-            btn.textContent = 'Restore Item';
-            btn.classList.add('restore-btn');
-            if (input) input.disabled = true;
+        .then(function (result) {
+          if (result.ok && result.data.success) {
+            form.style.display = 'none';
+            successMessage.style.display = 'block';
           } else {
-            row.classList.remove('removed-option');
-            btn.textContent = 'Temporarily Remove Item';
-            btn.classList.remove('restore-btn');
-            if (input) {
-              if (input.dataset.coldOnly === 'true') {
-                updateColdOnlyAvailability();
-              } else if (category === 'milk') {
-                updateMilkRequirement();
-              } else {
-                input.disabled = false;
-              }
-            }
+            formError.textContent = result.data.error || 'Hubo un error. Intente de nuevo.';
           }
+        })
+        .catch(function () {
+          formError.textContent = 'Hubo un error de conexion. Intente de nuevo.';
         });
     });
   }
 
   // ---------------------------------------------------------------------
   // Barista: remove/restore base items, delete custom items.
+  // Uses event delegation (listening on document.body) so this also
+  // works for custom item rows added dynamically after page load.
   // ---------------------------------------------------------------------
   var deleteItemModal = document.getElementById('deleteItemModal');
   var confirmDeleteItemBtn = document.getElementById('confirmDeleteItemBtn');
@@ -287,6 +186,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var row = btn.closest('.option-row');
 
     if (isCustom) {
+      // Custom items are permanently deleted, so confirm first
       pendingDeleteCategory = category;
       pendingDeleteValue = value;
       pendingDeleteRow = row;
@@ -294,6 +194,7 @@ document.addEventListener('DOMContentLoaded', function () {
       return;
     }
 
+    // Base item: toggle its temporarily-removed state
     var input = row ? row.querySelector('input') : null;
     var formData = new FormData();
     formData.append('category', category);
@@ -365,7 +266,90 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // ---------------------------------------------------------------------
-  // Barista: "Stop Taking Orders" toggle.
+  // Barista: add a brand-new item to a category
+  // ---------------------------------------------------------------------
+  function buildCustomOptionRow(category, value, label) {
+    var optionGroup = document.querySelector('.option-group[data-category="' + category + '"]');
+    var inputType = optionGroup ? optionGroup.dataset.type : 'radio';
+
+    var row = document.createElement('div');
+    row.className = 'option-row';
+    row.dataset.category = category;
+    row.dataset.value = value;
+
+    var labelEl = document.createElement('label');
+    labelEl.className = 'option-label';
+
+    var inputEl = document.createElement('input');
+    inputEl.type = inputType;
+    inputEl.name = category;
+    inputEl.value = value;
+
+    labelEl.appendChild(inputEl);
+    labelEl.appendChild(document.createTextNode(' ' + label));
+
+    var deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'remove-item-btn';
+    deleteBtn.dataset.category = category;
+    deleteBtn.dataset.value = value;
+    deleteBtn.dataset.custom = 'true';
+    deleteBtn.textContent = 'Delete Item';
+
+    row.appendChild(labelEl);
+    row.appendChild(deleteBtn);
+    return row;
+  }
+
+  document.querySelectorAll('.add-item-btn').forEach(function (btn) {
+    var addRow = btn.closest('.add-item-row');
+    var input = addRow.querySelector('.add-item-input');
+
+    function submitNewItem() {
+      var category = btn.dataset.category;
+      var label = input.value.trim();
+      if (!label) {
+        input.focus();
+        return;
+      }
+
+      var formData = new FormData();
+      formData.append('category', category);
+      formData.append('label', label);
+
+      fetch('/add_item', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken },
+        body: formData
+      })
+        .then(function (response) {
+          return response.json().then(function (data) {
+            return { ok: response.ok, data: data };
+          });
+        })
+        .then(function (result) {
+          if (!result.ok || !result.data.success) {
+            alert(result.data.error || 'No se pudo agregar el articulo.');
+            return;
+          }
+          input.value = '';
+          var newRow = buildCustomOptionRow(category, result.data.value, result.data.label);
+          addRow.parentNode.insertBefore(newRow, addRow);
+        });
+    }
+
+    btn.addEventListener('click', submitNewItem);
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        submitNewItem();
+      }
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // Barista: "Stop Taking Orders" toggle. Turning it ON (closing orders)
+  // asks for confirmation first; turning it OFF (reopening) is immediate.
   // ---------------------------------------------------------------------
   var stopOrdersToggle = document.getElementById('stopOrdersToggle');
   var stopOrdersModal = document.getElementById('stopOrdersModal');
@@ -388,8 +372,10 @@ document.addEventListener('DOMContentLoaded', function () {
   if (stopOrdersToggle) {
     stopOrdersToggle.addEventListener('change', function () {
       if (stopOrdersToggle.checked) {
+        // Turning ON "stop taking orders" - confirm before committing
         if (stopOrdersModal) stopOrdersModal.style.display = 'flex';
       } else {
+        // Turning OFF (reopening) - no confirmation needed
         commitStoreStatusToggle();
       }
     });
