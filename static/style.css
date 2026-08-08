@@ -470,6 +470,24 @@ body {
     padding: 20px 30px;
 }
 
+.orders-topbar-links {
+    display: flex;
+    gap: 10px;
+}
+
+.history-note {
+    max-width: 900px;
+    margin: 0 auto 20px auto;
+    padding: 0 20px;
+    color: #FFFDD0;
+    font-size: 14px;
+    text-align: center;
+}
+
+.history-box {
+    opacity: 0.95;
+}
+
 .logout-link {
     color: #FFFDD0;
     font-weight: bold;

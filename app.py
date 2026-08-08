@@ -41,6 +41,7 @@ DATA_FILE = os.path.join(DATA_DIR, "orders.json")
 REMOVED_ITEMS_FILE = os.path.join(DATA_DIR, "removed_items.json")
 CUSTOM_ITEMS_FILE = os.path.join(DATA_DIR, "custom_items.json")
 STORE_STATUS_FILE = os.path.join(DATA_DIR, "store_status.json")
+ORDER_LOG_FILE = os.path.join(DATA_DIR, "order_log.json")
 
 BARISTA_USERNAME = os.environ.get("BARISTA_USERNAME", "South Bend Spanish")
 BARISTA_PASSWORD = os.environ.get("BARISTA_PASSWORD", "2tim4:5")
@@ -311,6 +312,50 @@ def save_store_status(status):
         json.dump(status, f, indent=2, ensure_ascii=False)
 
 
+def append_order_log(order):
+    if USE_REDIS:
+        try:
+            _redis_command("RPUSH", "order_log",
+                           json.dumps(order, ensure_ascii=False))
+        except Exception as exc:
+            print("Upstash RPUSH failed for order_log: %s" % exc)
+        return
+    os.makedirs(DATA_DIR, exist_ok=True)
+    log = []
+    if os.path.exists(ORDER_LOG_FILE):
+        with open(ORDER_LOG_FILE, "r", encoding="utf-8") as f:
+            try:
+                log = json.load(f)
+            except json.JSONDecodeError:
+                log = []
+    log.append(order)
+    with open(ORDER_LOG_FILE, "w", encoding="utf-8") as f:
+        json.dump(log, f, indent=2, ensure_ascii=False)
+
+
+def load_order_log():
+    if USE_REDIS:
+        try:
+            raw_entries = _redis_command("LRANGE", "order_log", 0, -1) or []
+        except Exception as exc:
+            print("Upstash LRANGE failed for order_log: %s" % exc)
+            return []
+        entries = []
+        for raw in raw_entries:
+            try:
+                entries.append(json.loads(raw))
+            except (json.JSONDecodeError, TypeError):
+                continue
+        return entries
+    if not os.path.exists(ORDER_LOG_FILE):
+        return []
+    with open(ORDER_LOG_FILE, "r", encoding="utf-8") as f:
+        try:
+            return json.load(f)
+        except json.JSONDecodeError:
+            return []
+
+
 # ---------------------------------------------------------------------------
 # Rate limiting: a small in-memory sliding-window limiter keyed by
 # (endpoint, client IP). Good enough for a single-process deployment
@@ -517,13 +562,14 @@ def submit_order():
         orders = load_orders()
         orders.append(order)
         save_orders(orders)
+        append_order_log(order)
 
     return jsonify({"success": True})
-
 
 # ---------------------------------------------------------------------------
 # Barista login
 # ---------------------------------------------------------------------------
+
 
 @app.route("/login", methods=["POST"])
 @rate_limit(5, 60)
@@ -670,6 +716,16 @@ def orders_page():
     orders = load_orders()
     orders.reverse()  # newest first
     return render_template("orders.html", orders=orders)
+
+
+@app.route("/order_history")
+@rate_limit(30, 60)
+def order_history():
+    if not session.get("is_barista"):
+        return redirect(url_for("index"))
+    log = load_order_log()
+    log.reverse()  # newest first
+    return render_template("history.html", orders=log)
 
 
 @app.route("/orders/data")
