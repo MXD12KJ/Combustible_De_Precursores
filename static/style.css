@@ -601,6 +601,27 @@ body {
     outline: 3px solid #FFFDD0;
 }
 
+.notify-btn {
+    background-color: #8E44AD;
+}
+
+.notify-btn:hover {
+    background-color: #6C3483;
+}
+
+.notify-btn.sent {
+    background-color: #2E7031;
+}
+
+.notify-btn.failed {
+    background-color: #922B21;
+}
+
+.notify-btn:disabled {
+    opacity: 0.7;
+    cursor: default;
+}
+
 .delete-btn {
     background-color: #C0392B;
 }

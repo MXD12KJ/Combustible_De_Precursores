@@ -25,6 +25,39 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
+    // ---------- Auto-Notify: text the customer via carrier email gateways ----------
+    document.querySelectorAll('.notify-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var id = btn.dataset.id;
+            btn.disabled = true;
+            btn.classList.remove('sent', 'failed');
+            btn.textContent = 'Sending...';
+
+            fetch('/orders/' + id + '/notify', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken }
+            })
+                .then(function (response) { return response.json(); })
+                .then(function (data) {
+                    btn.disabled = false;
+                    if (data.success) {
+                        btn.textContent = 'Sent';
+                        btn.classList.add('sent');
+                    } else {
+                        btn.textContent = 'Failed - Text Manually';
+                        btn.classList.add('failed');
+                    }
+                    btn.title = data.detail || '';
+                })
+                .catch(function () {
+                    btn.disabled = false;
+                    btn.textContent = 'Failed - Text Manually';
+                    btn.classList.add('failed');
+                });
+        });
+    });
+
+
     // ---------- Delete order with confirmation ----------
     var deleteModal = document.getElementById('deleteModal');
     var confirmDeleteBtn = document.getElementById('confirmDeleteBtn');

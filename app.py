@@ -3,12 +3,14 @@ import json
 import os
 import re
 import secrets
+import smtplib
 import threading
 import time
 import urllib.request
 import uuid
 from collections import defaultdict, deque
 from datetime import datetime
+from email.mime.text import MIMEText
 from functools import wraps
 
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
@@ -45,6 +47,31 @@ ORDER_LOG_FILE = os.path.join(DATA_DIR, "order_log.json")
 
 BARISTA_USERNAME = os.environ.get("BARISTA_USERNAME", "South Bend Spanish")
 BARISTA_PASSWORD = os.environ.get("BARISTA_PASSWORD", "2tim4:5")
+
+# ---------------------------------------------------------------------------
+# Free SMS notifications via carrier email-to-SMS gateways. We don't know
+# which carrier a customer uses, so we send the same message to every major
+# carrier's gateway address at once — the ones that don't match are silently
+# ignored, the one that does gets delivered. Set EMAIL_SENDER and
+# EMAIL_APP_PASSWORD as environment variables to enable this (see README for
+# setup steps). If they're not set, the Auto-Notify button will always
+# report failure so the barista knows to text the customer manually instead.
+# ---------------------------------------------------------------------------
+EMAIL_SENDER = os.environ.get("EMAIL_SENDER", "")
+EMAIL_APP_PASSWORD = os.environ.get("EMAIL_APP_PASSWORD", "")
+
+SMS_GATEWAY_DOMAINS = [
+    "txt.att.net",              # AT&T
+    "tmomail.net",               # T-Mobile
+    "vtext.com",                 # Verizon
+    # Sprint (legacy; folded into T-Mobile, some old numbers still use it)
+    "messaging.sprintpcs.com",
+    "sms.myboostmobile.com",     # Boost Mobile
+    "sms.cricketwireless.net",   # Cricket
+    "mymetropcs.com",            # Metro by T-Mobile
+    "email.uscc.net",            # US Cellular
+    "msg.fi.google.com",         # Google Fi
+]
 
 _file_lock = threading.Lock()
 
@@ -437,9 +464,70 @@ def clean_text(value, max_length):
     return value[:max_length]
 
 
+def normalize_phone_for_sms(phone):
+    """Return a bare 10-digit US phone number, or None if it doesn't look
+    like a real one. Carrier gateway addresses expect just the 10 digits
+    (no country code, no punctuation)."""
+    digits = re.sub(r"\D", "", phone or "")
+    if len(digits) == 11 and digits.startswith("1"):
+        digits = digits[1:]
+    if len(digits) == 10:
+        return digits
+    return None
+
+
+def send_order_ready_sms(name, phone):
+    """Try to text the customer via every major US carrier's email-to-SMS
+    gateway at once. We can't know which carrier they're actually on, so we
+    send to all of them — the wrong ones are silently ignored by carriers
+    that don't recognize the number, the right one gets delivered.
+
+    Returns (ok, detail):
+      ok=True  as soon as at least one gateway accepts the message. This
+               only confirms sending succeeded, not that the text actually
+               reached the phone — carriers don't report that back to us.
+      ok=False only for failures we can actually detect: notifications
+               aren't configured, the phone number doesn't look valid, or
+               every single gateway rejected the message outright.
+    """
+    if not EMAIL_SENDER or not EMAIL_APP_PASSWORD:
+        return False, "SMS notifications aren't configured (missing EMAIL_SENDER / EMAIL_APP_PASSWORD)."
+
+    digits = normalize_phone_for_sms(phone)
+    if not digits:
+        return False, "Phone number doesn't look like a valid 10-digit US number."
+
+    body = "Hola %s! Su cafe ya esta listo. Gracias!" % name
+    recipients = [digits + "@" + domain for domain in SMS_GATEWAY_DOMAINS]
+
+    sent_count = 0
+    last_error = None
+
+    try:
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=10) as smtp:
+            smtp.starttls()
+            smtp.login(EMAIL_SENDER, EMAIL_APP_PASSWORD)
+            for recipient in recipients:
+                msg = MIMEText(body)
+                msg["Subject"] = ""
+                msg["From"] = EMAIL_SENDER
+                msg["To"] = recipient
+                try:
+                    smtp.sendmail(EMAIL_SENDER, [recipient], msg.as_string())
+                    sent_count += 1
+                except Exception as exc:
+                    last_error = str(exc)
+    except Exception as exc:
+        return False, "Could not connect or authenticate to send email: %s" % exc
+
+    if sent_count > 0:
+        return True, "Sent to %d/%d carrier gateways." % (sent_count, len(recipients))
+    return False, "Every carrier gateway rejected the message: %s" % (last_error or "unknown error")
+
 # ---------------------------------------------------------------------------
 # Security headers on every response
 # ---------------------------------------------------------------------------
+
 
 @app.after_request
 def set_security_headers(response):
@@ -758,6 +846,24 @@ def toggle_order_field(order_id, field):
                 return jsonify({"success": True, "value": o[field]})
 
     return jsonify({"error": "order not found"}), 404
+
+
+@app.route("/orders/<order_id>/notify", methods=["POST"])
+@rate_limit(20, 60)
+@csrf_protect
+def notify_order(order_id):
+    if not session.get("is_barista"):
+        return jsonify({"error": "unauthorized"}), 401
+    if not _UUID_RE.match(order_id):
+        return jsonify({"error": "invalid order id"}), 400
+
+    orders = load_orders()
+    order = next((o for o in orders if o["id"] == order_id), None)
+    if not order:
+        return jsonify({"error": "order not found"}), 404
+
+    ok, detail = send_order_ready_sms(order["name"], order["phone"])
+    return jsonify({"success": ok, "detail": detail})
 
 
 @app.route("/orders/<order_id>/delete", methods=["POST"])
