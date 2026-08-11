@@ -5,6 +5,7 @@ import re
 import secrets
 import threading
 import time
+import urllib.error
 import urllib.request
 import uuid
 from collections import defaultdict, deque
@@ -55,6 +56,7 @@ BARISTA_PASSWORD = os.environ.get("BARISTA_PASSWORD", "2tim4:5")
 # setup steps). If they're not set, the Auto-Notify button will always
 # report failure so the barista knows to text the customer manually instead.
 # ---------------------------------------------------------------------------
+
 BREVO_API_KEY = os.environ.get("BREVO_API_KEY", "")
 BREVO_SENDER_EMAIL = os.environ.get("BREVO_SENDER_EMAIL", "")
 
@@ -476,11 +478,11 @@ def normalize_phone_for_sms(phone):
 
 def send_order_ready_sms(name, phone):
     """Try to text the customer via every major US carrier's email-to-SMS
-    gateway at once, sent through Brevo's HTTPS API (not SMTP — Render's
-    free tier blocks outbound SMTP ports entirely). We can't know which
-    carrier they're actually on, so we send to all of them — the wrong ones
-    are silently ignored by carriers that don't recognize the number, the
-    right one gets delivered.
+    gateway at once, sent through Brevo's HTTPS API (not SMTP — see the
+    comment above BREVO_API_KEY for why). We can't know which carrier
+    they're actually on, so we send to all of them — the wrong ones are
+    silently ignored by carriers that don't recognize the number, the right
+    one gets delivered.
 
     Returns (ok, detail):
       ok=True  as soon as at least one gateway accepts the message. This
@@ -497,7 +499,7 @@ def send_order_ready_sms(name, phone):
     if not digits:
         return False, "Phone number doesn't look like a valid 10-digit US number."
 
-    body = "Hola %s! Su cafe ya esta listo" % name
+    body = "Hola %s! Tu orden en Little Lamb Cafe esta lista. Gracias!" % name
     recipients = [digits + "@" + domain for domain in SMS_GATEWAY_DOMAINS]
 
     sent_count = 0
@@ -524,8 +526,20 @@ def send_order_ready_sms(name, phone):
             with urllib.request.urlopen(req, timeout=10) as resp:
                 resp.read()
             sent_count += 1
+        except urllib.error.HTTPError as exc:
+            # Brevo puts the actual reason (bad key, unverified sender, etc.)
+            # in the response body — that's far more useful than the bare
+            # "HTTP Error 401: Unauthorized" str(exc) would give us.
+            try:
+                error_body = exc.read().decode("utf-8", errors="replace")
+            except Exception:
+                error_body = ""
+            last_error = "HTTP %s for %s: %s" % (
+                exc.code, recipient, error_body)
+            print("Brevo send failed: %s" % last_error)
         except Exception as exc:
-            last_error = str(exc)
+            last_error = "%s for %s: %s" % (type(exc).__name__, recipient, exc)
+            print("Brevo send failed: %s" % last_error)
 
     if sent_count > 0:
         return True, "Sent to %d/%d carrier gateways." % (sent_count, len(recipients))
