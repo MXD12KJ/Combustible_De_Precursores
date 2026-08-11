@@ -3,14 +3,12 @@ import json
 import os
 import re
 import secrets
-import smtplib
 import threading
 import time
 import urllib.request
 import uuid
 from collections import defaultdict, deque
 from datetime import datetime
-from email.mime.text import MIMEText
 from functools import wraps
 
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
@@ -57,8 +55,8 @@ BARISTA_PASSWORD = os.environ.get("BARISTA_PASSWORD", "2tim4:5")
 # setup steps). If they're not set, the Auto-Notify button will always
 # report failure so the barista knows to text the customer manually instead.
 # ---------------------------------------------------------------------------
-EMAIL_SENDER = os.environ.get("EMAIL_SENDER", "")
-EMAIL_APP_PASSWORD = os.environ.get("EMAIL_APP_PASSWORD", "")
+BREVO_API_KEY = os.environ.get("BREVO_API_KEY", "")
+BREVO_SENDER_EMAIL = os.environ.get("BREVO_SENDER_EMAIL", "")
 
 SMS_GATEWAY_DOMAINS = [
     "txt.att.net",              # AT&T
@@ -478,9 +476,11 @@ def normalize_phone_for_sms(phone):
 
 def send_order_ready_sms(name, phone):
     """Try to text the customer via every major US carrier's email-to-SMS
-    gateway at once. We can't know which carrier they're actually on, so we
-    send to all of them — the wrong ones are silently ignored by carriers
-    that don't recognize the number, the right one gets delivered.
+    gateway at once, sent through Brevo's HTTPS API (not SMTP — Render's
+    free tier blocks outbound SMTP ports entirely). We can't know which
+    carrier they're actually on, so we send to all of them — the wrong ones
+    are silently ignored by carriers that don't recognize the number, the
+    right one gets delivered.
 
     Returns (ok, detail):
       ok=True  as soon as at least one gateway accepts the message. This
@@ -490,35 +490,42 @@ def send_order_ready_sms(name, phone):
                aren't configured, the phone number doesn't look valid, or
                every single gateway rejected the message outright.
     """
-    if not EMAIL_SENDER or not EMAIL_APP_PASSWORD:
-        return False, "SMS notifications aren't configured (missing EMAIL_SENDER / EMAIL_APP_PASSWORD)."
+    if not BREVO_API_KEY or not BREVO_SENDER_EMAIL:
+        return False, "SMS notifications aren't configured (missing BREVO_API_KEY / BREVO_SENDER_EMAIL)."
 
     digits = normalize_phone_for_sms(phone)
     if not digits:
         return False, "Phone number doesn't look like a valid 10-digit US number."
 
-    body = "Hola %s! Su cafe ya esta listo. Gracias!" % name
+    body = "Hola %s! Su cafe ya esta listo" % name
     recipients = [digits + "@" + domain for domain in SMS_GATEWAY_DOMAINS]
 
     sent_count = 0
     last_error = None
 
-    try:
-        with smtplib.SMTP("smtp.gmail.com", 587, timeout=10) as smtp:
-            smtp.starttls()
-            smtp.login(EMAIL_SENDER, EMAIL_APP_PASSWORD)
-            for recipient in recipients:
-                msg = MIMEText(body)
-                msg["Subject"] = ""
-                msg["From"] = EMAIL_SENDER
-                msg["To"] = recipient
-                try:
-                    smtp.sendmail(EMAIL_SENDER, [recipient], msg.as_string())
-                    sent_count += 1
-                except Exception as exc:
-                    last_error = str(exc)
-    except Exception as exc:
-        return False, "Could not connect or authenticate to send email: %s" % exc
+    for recipient in recipients:
+        payload = json.dumps({
+            "sender": {"email": BREVO_SENDER_EMAIL},
+            "to": [{"email": recipient}],
+            "subject": "",
+            "textContent": body,
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            "https://api.brevo.com/v3/smtp/email",
+            data=payload,
+            headers={
+                "api-key": BREVO_API_KEY,
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                resp.read()
+            sent_count += 1
+        except Exception as exc:
+            last_error = str(exc)
 
     if sent_count > 0:
         return True, "Sent to %d/%d carrier gateways." % (sent_count, len(recipients))
