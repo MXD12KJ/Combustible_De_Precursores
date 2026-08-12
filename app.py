@@ -509,7 +509,7 @@ def send_order_ready_sms(name, phone):
         payload = json.dumps({
             "sender": {"email": BREVO_SENDER_EMAIL},
             "to": [{"email": recipient}],
-            "subject": "",
+            "subject": "Cafe Listo",
             "textContent": body,
         }).encode("utf-8")
         req = urllib.request.Request(
