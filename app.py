@@ -5,7 +5,6 @@ import re
 import secrets
 import threading
 import time
-import urllib.error
 import urllib.request
 import uuid
 from collections import defaultdict, deque
@@ -47,31 +46,6 @@ ORDER_LOG_FILE = os.path.join(DATA_DIR, "order_log.json")
 BARISTA_USERNAME = os.environ.get("BARISTA_USERNAME", "South Bend Spanish")
 BARISTA_PASSWORD = os.environ.get("BARISTA_PASSWORD", "2tim4:5")
 
-# ---------------------------------------------------------------------------
-# Free SMS notifications via carrier email-to-SMS gateways. We don't know
-# which carrier a customer uses, so we send the same message to every major
-# carrier's gateway address at once — the ones that don't match are silently
-# ignored, the one that does gets delivered. Set EMAIL_SENDER and
-# EMAIL_APP_PASSWORD as environment variables to enable this (see README for
-# setup steps). If they're not set, the Auto-Notify button will always
-# report failure so the barista knows to text the customer manually instead.
-# ---------------------------------------------------------------------------
-
-BREVO_API_KEY = os.environ.get("BREVO_API_KEY", "")
-BREVO_SENDER_EMAIL = os.environ.get("BREVO_SENDER_EMAIL", "")
-
-SMS_GATEWAY_DOMAINS = [
-    "txt.att.net",              # AT&T
-    "tmomail.net",               # T-Mobile
-    "vtext.com",                 # Verizon
-    # Sprint (legacy; folded into T-Mobile, some old numbers still use it)
-    "messaging.sprintpcs.com",
-    "sms.myboostmobile.com",     # Boost Mobile
-    "sms.cricketwireless.net",   # Cricket
-    "mymetropcs.com",            # Metro by T-Mobile
-    "email.uscc.net",            # US Cellular
-    "msg.fi.google.com",         # Google Fi
-]
 
 _file_lock = threading.Lock()
 
@@ -464,87 +438,6 @@ def clean_text(value, max_length):
     return value[:max_length]
 
 
-def normalize_phone_for_sms(phone):
-    """Return a bare 10-digit US phone number, or None if it doesn't look
-    like a real one. Carrier gateway addresses expect just the 10 digits
-    (no country code, no punctuation)."""
-    digits = re.sub(r"\D", "", phone or "")
-    if len(digits) == 11 and digits.startswith("1"):
-        digits = digits[1:]
-    if len(digits) == 10:
-        return digits
-    return None
-
-
-def send_order_ready_sms(name, phone):
-    """Try to text the customer via every major US carrier's email-to-SMS
-    gateway at once, sent through Brevo's HTTPS API (not SMTP — see the
-    comment above BREVO_API_KEY for why). We can't know which carrier
-    they're actually on, so we send to all of them — the wrong ones are
-    silently ignored by carriers that don't recognize the number, the right
-    one gets delivered.
-
-    Returns (ok, detail):
-      ok=True  as soon as at least one gateway accepts the message. This
-               only confirms sending succeeded, not that the text actually
-               reached the phone — carriers don't report that back to us.
-      ok=False only for failures we can actually detect: notifications
-               aren't configured, the phone number doesn't look valid, or
-               every single gateway rejected the message outright.
-    """
-    if not BREVO_API_KEY or not BREVO_SENDER_EMAIL:
-        return False, "SMS notifications aren't configured (missing BREVO_API_KEY / BREVO_SENDER_EMAIL)."
-
-    digits = normalize_phone_for_sms(phone)
-    if not digits:
-        return False, "Phone number doesn't look like a valid 10-digit US number."
-
-    body = "Hola %s! Tu orden en Little Lamb Cafe esta lista. Gracias!" % name
-    recipients = [digits + "@" + domain for domain in SMS_GATEWAY_DOMAINS]
-
-    sent_count = 0
-    last_error = None
-
-    for recipient in recipients:
-        payload = json.dumps({
-            "sender": {"email": BREVO_SENDER_EMAIL},
-            "to": [{"email": recipient}],
-            "subject": "Cafe Listo",
-            "textContent": body,
-        }).encode("utf-8")
-        req = urllib.request.Request(
-            "https://api.brevo.com/v3/smtp/email",
-            data=payload,
-            headers={
-                "api-key": BREVO_API_KEY,
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-            },
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                resp.read()
-            sent_count += 1
-        except urllib.error.HTTPError as exc:
-            # Brevo puts the actual reason (bad key, unverified sender, etc.)
-            # in the response body — that's far more useful than the bare
-            # "HTTP Error 401: Unauthorized" str(exc) would give us.
-            try:
-                error_body = exc.read().decode("utf-8", errors="replace")
-            except Exception:
-                error_body = ""
-            last_error = "HTTP %s for %s: %s" % (
-                exc.code, recipient, error_body)
-            print("Brevo send failed: %s" % last_error)
-        except Exception as exc:
-            last_error = "%s for %s: %s" % (type(exc).__name__, recipient, exc)
-            print("Brevo send failed: %s" % last_error)
-
-    if sent_count > 0:
-        return True, "Sent to %d/%d carrier gateways." % (sent_count, len(recipients))
-    return False, "Every carrier gateway rejected the message: %s" % (last_error or "unknown error")
-
 # ---------------------------------------------------------------------------
 # Security headers on every response
 # ---------------------------------------------------------------------------
@@ -867,24 +760,6 @@ def toggle_order_field(order_id, field):
                 return jsonify({"success": True, "value": o[field]})
 
     return jsonify({"error": "order not found"}), 404
-
-
-@app.route("/orders/<order_id>/notify", methods=["POST"])
-@rate_limit(20, 60)
-@csrf_protect
-def notify_order(order_id):
-    if not session.get("is_barista"):
-        return jsonify({"error": "unauthorized"}), 401
-    if not _UUID_RE.match(order_id):
-        return jsonify({"error": "invalid order id"}), 400
-
-    orders = load_orders()
-    order = next((o for o in orders if o["id"] == order_id), None)
-    if not order:
-        return jsonify({"error": "order not found"}), 404
-
-    ok, detail = send_order_ready_sms(order["name"], order["phone"])
-    return jsonify({"success": ok, "detail": detail})
 
 
 @app.route("/orders/<order_id>/delete", methods=["POST"])
