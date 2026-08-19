@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="csrf-token" content="{{ csrf_token() }}">
-  <title>Little Lamb Cafe</title>
+  <title>Frank'n Beans Coffee Shop</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 
@@ -22,7 +22,7 @@
   </div>
 
   <header class="title-header">
-    <h1 class="site-title">Little Lamb Cafe</h1>
+    <h1 class="site-title">Frank'n Beans Coffee Shop</h1>
     {% if is_barista %}
     <p class="barista-banner">Barista Mode: remove items you're out of, or add brand-new ones below.</p>
     <div class="store-status-control">
